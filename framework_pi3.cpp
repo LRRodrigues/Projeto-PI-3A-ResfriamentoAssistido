@@ -1,29 +1,30 @@
 #include <DHT.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal.h>
 
-
+// ==========================================
+// DEFINIÇÕES DE HARDWARE
+// ==========================================
 // Configuração do DHT22
-#define DHTPIN 7        // Pino digital conectado ao Data do DHT22
+#define DHTPIN 8        // D8 pro medidor DHT22
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-// Configuração do Display LCD I2C (Endereço comum 0x27)
-// No Arduino Leonardo: SDA é o pino 2, SCL é o pino 3
-LiquidCrystal_I2C lcd(0x27, 16, 2); 
+// Configuração do Display LCD 16x2 (Ligação Paralela)
+// Pinos: RS, E, D4, D5, D6, D7
+// Tabela: RS=D12, E=D11, D4=D5, D5=D4, D6=D3, D7=D2
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
 // Pinos das Ventoinhas (Via transistores BC547)
-#define FAN1_PIN 4
-#define FAN2_PIN 5
+#define FAN1_PIN 9      // D9 controla a ventoinha 1
+#define FAN2_PIN 10     // D10 controla a ventoinha 2
 
 // ==========================================
 // PARÂMETROS DE CONTROLE TÉRMICO
 // ==========================================
-
 #define TEMP_LIGAR 40.0
 #define TEMP_DESLIGAR 35.0
 
-
+// O DHT22 é um sensor lento. Requer pelo menos 2000ms entre leituras.
 #define INTERVALO_LEITURA 2000 
 
 // ==========================================
@@ -41,18 +42,18 @@ void setup() {
   // Configuração dos pinos das ventoinhas
   pinMode(FAN1_PIN, OUTPUT);
   pinMode(FAN2_PIN, OUTPUT);
-  desligarFans(); 
+  desligarFans(); // Garante inicialização com tudo desligado
 
   // Inicializa Sensor
   dht.begin();
   
-  // Inicializa Display LCD
-  lcd.init();
-  lcd.backlight();
+  // Inicializa Display LCD (16 colunas, 2 linhas)
+  lcd.begin(16, 2);
   lcd.setCursor(0, 0);
   lcd.print("Sistema Iniciado");
   lcd.setCursor(0, 1);
   lcd.print("Aguarde...      ");
+  
   delay(2000); // Tempo para o DHT22 estabilizar
   lcd.clear();
 }
@@ -68,9 +69,9 @@ void loop() {
 
     // Leitura do DHT22
     float temp = dht.readTemperature();
-    float umidade = dht.readHumidity(); // Lendo umidade só por log
+    float umidade = dht.readHumidity(); // Lendo umidade por log
 
-    // Tratamento de erro
+    // Tratamento de erro nível 2: Leitura inválida
     if (isnan(temp) || isnan(umidade)) {
       Serial.println("ERRO: Falha na leitura do DHT22.");
       
@@ -88,11 +89,11 @@ void loop() {
     Serial.print(temp);
     Serial.println(" C");
 
-    // Atualiza linha 1 do LCD com a temperatura
+    
     lcd.setCursor(0, 0);
     lcd.print("Temp: ");
-    lcd.print(temp, 1); // 1 casa decimal
-    lcd.print(" C    "); // Espaços para limpar sujeira da tela
+    lcd.print(temp, 1); 
+    lcd.print(" C    ");
 
     // Lógica de Histerese e atualização da linha 2 do LCD
     lcd.setCursor(0, 1);
@@ -101,11 +102,15 @@ void loop() {
       lcd.print("Status: LIGADO  ");
       
     } else if (temp <= TEMP_DESLIGAR) {
-      if (fansAtivas) desligarFans();
-      lcd.print("Status: DESLIG. ");
+      if (!fansAtivas) {
+        lcd.print("Status: DESLIG. ");
+      } else {
+        desligarFans();
+        lcd.print("Status: DESLIG. ");
+      }
       
     } else {
-      
+      // Zona morta da histerese (entre 35 e 40): mantém o estado anterior
       if (fansAtivas) {
         lcd.print("Status: LIGADO  ");
       } else {
