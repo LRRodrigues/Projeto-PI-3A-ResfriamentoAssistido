@@ -1,136 +1,214 @@
-#include <DHT.h>
-#include <LiquidCrystal.h>
+#include <DHT.h>             // Biblioteca do sensor DHT22
+#include <LiquidCrystal.h>   // Biblioteca do LCD 1602A
 
-// ==========================================
-// DEFINIÇÕES DE HARDWARE
-// ==========================================
-// Configuração do DHT22
-#define DHTPIN 8        // D8 pro medidor DHT22
+// ======================================================
+// CONFIGURAÇÃO DO SENSOR DHT22
+// ======================================================
+
+// Pino DATA do DHT22 ligado ao pino D8 do Arduino
+#define DHTPIN 8
+
+// Define o modelo do sensor
 #define DHTTYPE DHT22
+
+// Cria o objeto do sensor
 DHT dht(DHTPIN, DHTTYPE);
 
-// Configuração do Display LCD 16x2 (Ligação Paralela)
-// Pinos: RS, E, D4, D5, D6, D7
-// Tabela: RS=D12, E=D11, D4=D5, D5=D4, D6=D3, D7=D2
+// ======================================================
+// CONFIGURAÇÃO DO LCD 1602A
+// ======================================================
+
+// Ligação:
+// RS -> D12
+// E  -> D11
+// D4 -> D5
+// D5 -> D4
+// D6 -> D3
+// D7 -> D2
 LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
-// Pinos das Ventoinhas (Via transistores BC547)
-#define FAN1_PIN 9      // D9 controla a ventoinha 1
-#define FAN2_PIN 10     // D10 controla a ventoinha 2
+// ======================================================
+// CONFIGURAÇÃO DAS VENTOINHAS
+// ======================================================
 
-// ==========================================
+// Ventoinha principal
+#define FAN1_PIN 9
+
+// Ventoinha secundária (opcional)
+#define FAN2_PIN 10
+
+// ======================================================
 // PARÂMETROS DE CONTROLE TÉRMICO
-// ==========================================
+// ======================================================
+
+// Temperatura para ligar a ventilação
 #define TEMP_LIGAR 40.0
+
+// Temperatura para desligar a ventilação
 #define TEMP_DESLIGAR 35.0
 
-// O DHT22 é um sensor lento. Requer pelo menos 2000ms entre leituras.
-#define INTERVALO_LEITURA 2000 
+// Intervalo entre leituras do DHT22
+// O DHT22 não deve ser lido muito rápido
+#define INTERVALO_LEITURA 2000
 
-// ==========================================
-// VARIÁVEIS GLOBAIS
-// ==========================================
-unsigned long ultimaLeitura = 0;
+// Variável que guarda o estado atual das ventoinhas
 bool fansAtivas = false;
 
-// ==========================================
-// SETUP
-// ==========================================
-void setup() {
-  Serial.begin(115200);
-  
-  // Configuração dos pinos das ventoinhas
-  pinMode(FAN1_PIN, OUTPUT);
-  pinMode(FAN2_PIN, OUTPUT);
-  desligarFans(); // Garante inicialização com tudo desligado
+// ======================================================
+// FUNÇÃO: LIGAR VENTOINHAS
+// ======================================================
 
-  // Inicializa Sensor
-  dht.begin();
-  
-  // Inicializa Display LCD (16 colunas, 2 linhas)
-  lcd.begin(16, 2);
-  lcd.setCursor(0, 0);
-  lcd.print("Sistema Iniciado");
-  lcd.setCursor(0, 1);
-  lcd.print("Aguarde...      ");
-  
-  delay(2000); // Tempo para o DHT22 estabilizar
-  lcd.clear();
-}
-
-// ==========================================
-// LOOP PRINCIPAL
-// ==========================================
-void loop() {
-  unsigned long tempoAtual = millis();
-
-  if (tempoAtual - ultimaLeitura >= INTERVALO_LEITURA) {
-    ultimaLeitura = tempoAtual;
-
-    // Leitura do DHT22
-    float temp = dht.readTemperature();
-    float umidade = dht.readHumidity(); // Lendo umidade por log
-
-    // Tratamento de erro nível 2: Leitura inválida
-    if (isnan(temp) || isnan(umidade)) {
-      Serial.println("ERRO: Falha na leitura do DHT22.");
-      
-      lcd.setCursor(0, 0);
-      lcd.print("Erro no Sensor! ");
-      lcd.setCursor(0, 1);
-      lcd.print("Fans ATIVADAS   ");
-      
-      ligarFans(); // Aciona por segurança se o sensor falhar
-      return; 
-    }
-
-    // Log na Serial
-    Serial.print("Temp do Ar: ");
-    Serial.print(temp);
-    Serial.println(" C");
-
-    
-    lcd.setCursor(0, 0);
-    lcd.print("Temp: ");
-    lcd.print(temp, 1); 
-    lcd.print(" C    ");
-
-    // Lógica de Histerese e atualização da linha 2 do LCD
-    lcd.setCursor(0, 1);
-    if (temp >= TEMP_LIGAR) {
-      if (!fansAtivas) ligarFans();
-      lcd.print("Status: LIGADO  ");
-      
-    } else if (temp <= TEMP_DESLIGAR) {
-      if (!fansAtivas) {
-        lcd.print("Status: DESLIG. ");
-      } else {
-        desligarFans();
-        lcd.print("Status: DESLIG. ");
-      }
-      
-    } else {
-      // Zona morta da histerese (entre 35 e 40): mantém o estado anterior
-      if (fansAtivas) {
-        lcd.print("Status: LIGADO  ");
-      } else {
-        lcd.print("Status: DESLIG. ");
-      }
-    }
-  }
-}
-
-// ==========================================
-// FUNÇÕES AUXILIARES
-// ==========================================
 void ligarFans() {
+
+  // Envia nível lógico alto para os transistores
   digitalWrite(FAN1_PIN, HIGH);
   digitalWrite(FAN2_PIN, HIGH);
+
+  // Atualiza variável de controle
   fansAtivas = true;
 }
 
+// ======================================================
+// FUNÇÃO: DESLIGAR VENTOINHAS
+// ======================================================
+
 void desligarFans() {
+
+  // Envia nível lógico baixo para os transistores
   digitalWrite(FAN1_PIN, LOW);
   digitalWrite(FAN2_PIN, LOW);
+
+  // Atualiza variável de controle
   fansAtivas = false;
+}
+
+// ======================================================
+// SETUP
+// Executa apenas uma vez ao ligar o sistema
+// ======================================================
+
+void setup() {
+
+  // Inicializa comunicação serial
+  Serial.begin(9600);
+
+  // Configura os pinos das ventoinhas como saída
+  pinMode(FAN1_PIN, OUTPUT);
+  pinMode(FAN2_PIN, OUTPUT);
+
+  // Garante que o sistema inicia com as ventoinhas desligadas
+  desligarFans();
+
+  // Inicializa o sensor DHT22
+  dht.begin();
+
+  // Inicializa o LCD 16 colunas x 2 linhas
+  lcd.begin(16, 2);
+
+  // Limpa o display
+  lcd.clear();
+
+  // Mensagem inicial
+  lcd.setCursor(0, 0);
+  lcd.print("Sistema iniciado");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Aguarde...");
+
+  // Tempo para estabilização do DHT22
+  delay(2000);
+
+  lcd.clear();
+}
+
+// ======================================================
+// LOOP PRINCIPAL
+// Executa continuamente
+// ======================================================
+
+void loop() {
+
+  // Lê a temperatura atual
+  float temp = dht.readTemperature();
+
+  // --------------------------------------------------
+  // Verifica erro de leitura
+  // --------------------------------------------------
+
+  if (isnan(temp)) {
+
+    Serial.println("ERRO: Falha na leitura do DHT22");
+
+    lcd.setCursor(0, 0);
+    lcd.print("Erro DHT22      ");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Verifique sensor");
+
+    // Em caso de erro, desliga as ventoinhas
+    desligarFans();
+
+    delay(INTERVALO_LEITURA);
+    return;
+  }
+
+  // --------------------------------------------------
+  // Exibe temperatura na serial
+  // --------------------------------------------------
+
+  Serial.print("Temperatura: ");
+  Serial.print(temp, 1);
+  Serial.println(" C");
+
+  // --------------------------------------------------
+  // Atualiza primeira linha do LCD
+  // --------------------------------------------------
+
+  lcd.setCursor(0, 0);
+
+  lcd.print("Temp: ");
+  lcd.print(temp, 1);
+
+  lcd.print((char)223);   // Símbolo °
+  lcd.print("C      ");
+
+  // --------------------------------------------------
+  // Controle térmico com histerese
+  // --------------------------------------------------
+
+  lcd.setCursor(0, 1);
+
+  // Liga as ventoinhas acima da temperatura limite
+  if (temp >= TEMP_LIGAR) {
+
+    ligarFans();
+
+    lcd.print("Fan: LIGADA    ");
+  }
+
+  // Desliga abaixo da temperatura mínima
+  else if (temp <= TEMP_DESLIGAR) {
+
+    desligarFans();
+
+    lcd.print("Fan: DESLIGADA ");
+  }
+
+  // Região intermediária:
+  // mantém o estado anterior para evitar ficar
+  // ligando/desligando rapidamente
+  else {
+
+    if (fansAtivas) {
+
+      lcd.print("Fan: LIGADA    ");
+
+    } else {
+
+      lcd.print("Fan: DESLIGADA ");
+    }
+  }
+
+  // Aguarda antes da próxima leitura
+  delay(INTERVALO_LEITURA);
 }
